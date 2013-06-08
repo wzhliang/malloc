@@ -176,12 +176,22 @@ static int find_chunks(size_t size)
         if ( free_list[i] >= 0 && sizeof_cont_chunkc( free_list[i] ) >= size )
         {
             head = free_list[i];
-            printf("Found chunk: %d.\n", head);
+            /*printf("Found chunk: %d.\n", head);*/
             break;
         }
     }
 
     return head;
+}
+
+static void check_if_clean(void)
+{
+    int i;
+
+    for ( i = 0; i < NUM_CHUNKS; i++ )
+    {
+        assert ( the_chunks[i].free == 1 );
+    }
 }
 
 /* TESTS */
@@ -198,11 +208,11 @@ int test_1(void)
         ptr[i] = mmaloc( s );
         if ( ptr[i] == NULL )
         {
-            printf("Failed to allcoate %d bytes.\n", s);
+            printf("Failed to allcoate %ld bytes.\n", s);
         }
         else
         {
-            printf("Allocated %d bytes.\n", s);
+            printf("Allocated %ld bytes.\n", s);
             memset(ptr[i], i, s);
         }
     }
@@ -216,6 +226,8 @@ int test_2(void)
     size_t s[10];
     void *ptr[10];
 
+    printf("+++++++++++ TEST_2 ++++++++++++++\n");
+
     memset( ptr, 0, 10 );
     for (i = 0; i < 10; i++)
     {
@@ -223,11 +235,11 @@ int test_2(void)
         ptr[i] = mmaloc( s[i] );
         if ( ptr[i] == NULL )
         {
-            printf("Failed to allcoate %d bytes.\n", s[i]);
+            printf("Failed to allcoate %ld bytes.\n", s[i]);
         }
         else
         {
-            printf("Allocated %d bytes.\n", s[i]);
+            printf("Allocated %ld bytes.\n", s[i]);
             memset(ptr[i], i, s[i]);
         }
     }
@@ -241,11 +253,74 @@ int test_2(void)
     return 0;
 }
 
+int test_3(void)
+{
+#define N 100
+    int i, j;
+    size_t s[N];
+    int alloc;
+    void *ptr[N];
+
+    printf("+++++++++++ TEST_3 ++++++++++++++\n");
+    for (i = 0; i < N; i++)
+    {
+        ptr[i] = NULL;
+    }
+
+    for (i = 0; i < N; i++)
+    {
+        alloc = (rand() % 10) - 5;
+        if ( alloc >= 0 )
+        {
+            s[i] = rand() % (2*4096);
+            ptr[i] = mmaloc( s[i] );
+            if ( ptr[i] == NULL )
+            {
+                printf("Failed to allcoate %ld bytes.\n", s[i]);
+            }
+            else
+            {
+                printf("Allocated %ld bytes.\n", s[i]);
+                memset(ptr[i], i, s[i]);
+            }
+        }
+        else
+        {
+            for (j = 0; j < N; j++)
+            {
+                if ( ptr[j] != NULL )
+                {
+                    memset(ptr[j], 0, s[j]);
+                    printf("Freeing %p.\n", ptr[j]);
+                    free(ptr[j]);
+                    ptr[j] = NULL;
+                }
+            }
+        }
+    }
+
+    for (i = 0; i < N; i++)
+    {
+        if ( ptr[i] != NULL )
+        {
+            memset(ptr[i], 0, s[i]);
+            printf("Freeing %p.\n", ptr[i]);
+            free(ptr[i]);
+            ptr[i] = NULL;
+        }
+    }
+
+    return 0;
+}
+
 int main(void)
 {
     init();
     /*test_1();*/
     test_2();
+    check_if_clean();
+    test_3();
+    check_if_clean();
     printf("All done.\n");
 
     return 0;
