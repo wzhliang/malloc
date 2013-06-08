@@ -56,7 +56,6 @@ void *mmaloc(size_t size)
 {
     int ch;
 
-    /* FIXME: this is probably not right */
     if ( size == 0 )
         size = 1;
 
@@ -66,7 +65,7 @@ void *mmaloc(size_t size)
         return NULL;
     }
 
-    mark_chunks( ch, size / CHUNK_SIZE + 1);
+    mark_chunks(ch, size / CHUNK_SIZE + 1);
 
     return (void*)(the_chunks[ch].addr);
 }
@@ -79,16 +78,18 @@ void free(void *ptr)
     if ( p == NULL || p < the_heap )
         return;
 
-    if ( ((p - the_heap) % CHUNK_SIZE)!= 0 )
+    if ( ((p - the_heap) % CHUNK_SIZE) != 0 )
         return;
 
     ch = (p - the_heap) / CHUNK_SIZE;
     unmark_chunks( ch );
 }
 
+/* Helper function */
 static void free_list_remove(int idx)
 {
     int i;
+
     for (i = 0; i < MAX_FREE_BLOCKS; i++)
     {
         if ( free_list[i] == idx )
@@ -102,6 +103,7 @@ static void free_list_remove(int idx)
 static void free_list_add(int idx)
 {
     int i;
+
     for (i = 0; i < MAX_FREE_BLOCKS; i++)
     {
         if ( free_list[i] == -1 )
@@ -112,11 +114,16 @@ static void free_list_add(int idx)
     }
 }
 
+/* 
+ * start: index of the first chunk to mark 
+ * len: number of chunks to mark 
+ **/
 static void mark_chunks(int start, int len)
 {
     int i;
 
-    assert( start < MAX_FREE_BLOCKS );
+    assert( start < NUM_CHUNKS );
+    assert( start+len < NUM_CHUNKS );
 
     for ( i = 0; i < len; i++ )
     {
@@ -132,16 +139,19 @@ static void mark_chunks(int start, int len)
 // non-free chunk knows itself how long it is
 static void unmark_chunks(int start)
 {
-    int i;
+    int i, len;
 
     assert( the_chunks[start].free == 0 );
     assert( the_chunks[start].len != 0 );
 
-    for ( i = 0; i < the_chunks[start].len; i ++ )
+    len = the_chunks[start].len;
+
+    for ( i = 0; i < len; i ++ )
     {
         the_chunks[start+i].free = 1;
+        the_chunks[start+i].len = 0;
     }
-    free_list_remove( start );
+    free_list_add( start );
 }
 
 static size_t sizeof_cont_chunkc(int ch)
