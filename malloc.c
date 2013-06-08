@@ -6,6 +6,8 @@
 /* TODO
  * 1. make better use of the len field. Use it for free chunks as well. 
  * 2. Implement merging algorithm to get rid of fragmentation.
+ * 3. Improve testing to see that the content of the block is consistent. E.g. each block
+ * can have the same value as it's index.
  */
 typedef struct chunk_tag
 {
