@@ -3,6 +3,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* TODO
+ * 1. make better use of the len field. Use it for free chunks as well. 
+ * 2. Implement merging algorithm to get rid of fragmentation.
+ */
 typedef struct chunk_tag
 {
     unsigned char *addr;
