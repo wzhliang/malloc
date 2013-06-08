@@ -17,8 +17,6 @@ typedef struct chunk_tag
 #define HEAP_SIZE (CHUNK_SIZE*NUM_CHUNKS)
 #define MAX_FREE_BLOCKS 1024
 
-/*#define reset_chunk(b) (b)->addr = 0; (b)->free = 1;*/
-
 unsigned char _the_heap[HEAP_SIZE];
 unsigned char *the_heap = _the_heap;
 chunk_t the_chunks[NUM_CHUNKS];
@@ -52,7 +50,7 @@ void init(void)
     free_list[0] = 0;
 }
 
-void *mmaloc(size_t size)
+void *malloc(size_t size)
 {
     int ch;
 
@@ -205,7 +203,7 @@ int test_1(void)
     for (i = 0; i < 10; i++)
     {
         s = rand() % (20*4096);
-        ptr[i] = mmaloc( s );
+        ptr[i] = malloc( s );
         if ( ptr[i] == NULL )
         {
             printf("Failed to allcoate %ld bytes.\n", s);
@@ -232,7 +230,7 @@ int test_2(void)
     for (i = 0; i < 10; i++)
     {
         s[i] = rand() % (2*4096);
-        ptr[i] = mmaloc( s[i] );
+        ptr[i] = malloc( s[i] );
         if ( ptr[i] == NULL )
         {
             printf("Failed to allcoate %ld bytes.\n", s[i]);
@@ -273,7 +271,7 @@ int test_3(void)
         if ( alloc >= 0 )
         {
             s[i] = rand() % (2*4096);
-            ptr[i] = mmaloc( s[i] );
+            ptr[i] = malloc( s[i] );
             if ( ptr[i] == NULL )
             {
                 printf("Failed to allcoate %ld bytes.\n", s[i]);
