@@ -4,7 +4,8 @@
 #include <stdlib.h>
 
 /* TODO
- * 1. make better use of the len field. Use it for free chunks as well. 
+ * 1. make better use of the len field. Use it for free chunks as well. This will speed up
+ * the process of looking for free chunk.
  * 2. Implement merging algorithm to get rid of fragmentation.
  * 3. Improve testing to see that the content of the block is consistent. E.g. each block
  * can have the same value as it's index.
@@ -14,7 +15,7 @@ typedef struct chunk_tag
     unsigned char *addr;
     int free;
     int index;
-    int len; // number of chunks when it's allocated
+    int len; // number of chunks when it's allocated OR free
 } chunk_t;
 
 
@@ -23,17 +24,19 @@ typedef struct chunk_tag
 #define HEAP_SIZE (CHUNK_SIZE*NUM_CHUNKS)
 #define MAX_FREE_BLOCKS 1024
 
+#define DEBUG 1
+
 unsigned char _the_heap[HEAP_SIZE];
 unsigned char *the_heap = _the_heap;
 chunk_t the_chunks[NUM_CHUNKS];
 int free_list[MAX_FREE_BLOCKS]; // -1 means it's not occupied. other value stores the index of chunk that's free
 
 static void mark_chunks(int start, int len);
-static size_t sizeof_cont_chunkc(int ch);
+static size_t sizeof_cont_chuncks(int ch);
 static int find_chunks(size_t size);
 static void free_list_add(int idx);
 static void free_list_remove(int idx);
-static void unmark_chunks(int start);
+static void unmark_chunks(int start, int len);
 
 void init(void)
 {
@@ -53,12 +56,16 @@ void init(void)
     {
         free_list[i] = -1;
     }
-    free_list[0] = 0;
+    // Initial state
+    free_list_add( 0 );
+    the_chunks[0].len = NUM_CHUNKS;
 }
 
-void *malloc(size_t size)
+void *mmalloc(size_t size)
 {
     int ch;
+    int len;
+    int hole = 0;
 
     if ( size == 0 )
         size = 1;
@@ -69,24 +76,40 @@ void *malloc(size_t size)
         return NULL;
     }
 
-    mark_chunks(ch, size / CHUNK_SIZE + 1);
+    len = size / CHUNK_SIZE;
+    if ( size % CHUNK_SIZE != 0 )
+    {
+        len ++;
+    }
+
+    mark_chunks( ch, len );
 
     return (void*)(the_chunks[ch].addr);
 }
 
-void free(void *ptr)
+void ffree(void *ptr)
 {
     unsigned char *p = ptr;
     int ch;
 
-    if ( p == NULL || p < the_heap )
+    if ( p == NULL )
+    {
+#ifdef DEBUG
+        printf("WARNING: trying to free an NULL pointer.\n");
+#endif
         return;
+    }
 
-    if ( ((p - the_heap) % CHUNK_SIZE) != 0 )
+    if ( ((p - the_heap) % CHUNK_SIZE) != 0 || p < the_heap )
+    {
+#ifdef DEBUG
+        printf("WARNING: trying to free an unaligned pointer: %p.\n", ptr);
+#endif
         return;
+    }
 
     ch = (p - the_heap) / CHUNK_SIZE;
-    unmark_chunks( ch );
+    unmark_chunks( ch, the_chunks[ch].len );
 }
 
 /* Helper function */
@@ -118,9 +141,9 @@ static void free_list_add(int idx)
     }
 }
 
-/* 
- * start: index of the first chunk to mark 
- * len: number of chunks to mark 
+/*
+ * start: index of the first chunk to mark
+ * len: number of chunks to mark
  **/
 static void mark_chunks(int start, int len)
 {
@@ -129,42 +152,49 @@ static void mark_chunks(int start, int len)
     assert( start < NUM_CHUNKS );
     assert( start+len < NUM_CHUNKS );
 
-    for ( i = 0; i < len; i++ )
+    for (i = 0; i < len; i++)
     {
         assert( the_chunks[start+i].free == 1 );
         the_chunks[start+i].free = 0;
     }
     the_chunks[start].len = len;
 
-    free_list_remove(start);
-    free_list_add(start+len);
+    free_list_remove( start );
+    for (i = start + len; i < NUM_CHUNKS; i++)
+    {
+        if ( the_chunks[i].free )
+        {
+            free_list_add( i );
+            // FIXME: this is not very efficient
+            the_chunks[i].len = sizeof_cont_chuncks(i) / CHUNK_SIZE;
+            break;
+        }
+    }
 }
 
-// non-free chunk knows itself how long it is
-static void unmark_chunks(int start)
+static void unmark_chunks(int start, int len)
 {
-    int i, len;
+    int i;
 
-    assert( the_chunks[start].free == 0 );
-    assert( the_chunks[start].len != 0 );
+    /*assert( the_chunks[start].free == 0 );*/
+    /*assert( the_chunks[start].len != 0 );*/
 
-    len = the_chunks[start].len;
-
-    for ( i = 0; i < len; i ++ )
+    for (i = 0; i < len; i ++)
     {
         the_chunks[start+i].free = 1;
         the_chunks[start+i].len = 0;
     }
+    the_chunks[start].len = len;
     free_list_add( start );
 }
 
-static size_t sizeof_cont_chunkc(int ch)
+static size_t sizeof_cont_chuncks(int ch)
 {
     size_t size = 0;
 
     assert( ch < NUM_CHUNKS );
 
-    while ( the_chunks[ch++].free )
+    while (the_chunks[ch++].free)
         size += CHUNK_SIZE;
 
     return size;
@@ -175,9 +205,10 @@ static int find_chunks(size_t size)
     int head = -1;
     int i;
 
-    for ( i = 0; i < MAX_FREE_BLOCKS; i ++ )
+    for (i = 0; i < MAX_FREE_BLOCKS; i++)
     {
-        if ( free_list[i] >= 0 && sizeof_cont_chunkc( free_list[i] ) >= size )
+        if ( (free_list[i] >= 0) &&
+                (the_chunks[free_list[i]].len * CHUNK_SIZE >= size) )
         {
             head = free_list[i];
             /*printf("Found chunk: %d.\n", head);*/
@@ -185,9 +216,12 @@ static int find_chunks(size_t size)
         }
     }
 
+    // FIXME: when the above failed, should try to merge freed chunks
+
     return head;
 }
 
+#ifdef DEBUG
 static void check_if_clean(void)
 {
     int i;
@@ -197,6 +231,7 @@ static void check_if_clean(void)
         assert ( the_chunks[i].free == 1 );
     }
 }
+#endif
 
 /* TESTS */
 int test_1(void)
@@ -209,7 +244,7 @@ int test_1(void)
     for (i = 0; i < 10; i++)
     {
         s = rand() % (20*4096);
-        ptr[i] = malloc( s );
+        ptr[i] = mmalloc( s );
         if ( ptr[i] == NULL )
         {
             printf("Failed to allcoate %ld bytes.\n", s);
@@ -236,14 +271,14 @@ int test_2(void)
     for (i = 0; i < 10; i++)
     {
         s[i] = rand() % (2*4096);
-        ptr[i] = malloc( s[i] );
+        ptr[i] = mmalloc( s[i] );
         if ( ptr[i] == NULL )
         {
             printf("Failed to allcoate %ld bytes.\n", s[i]);
         }
         else
         {
-            printf("Allocated %ld bytes.\n", s[i]);
+            printf("Allocated %ld bytes @ %p.\n", s[i], ptr[i]);
             memset(ptr[i], i, s[i]);
         }
     }
@@ -251,7 +286,7 @@ int test_2(void)
     {
         memset(ptr[i], 0, s[i]);
         printf("Freeing %p.\n", ptr[i]);
-        free(ptr[i]);
+        ffree(ptr[i]);
     }
 
     return 0;
@@ -277,14 +312,14 @@ int test_3(void)
         if ( alloc >= 0 )
         {
             s[i] = rand() % (2*4096);
-            ptr[i] = malloc( s[i] );
+            ptr[i] = mmalloc( s[i] );
             if ( ptr[i] == NULL )
             {
                 printf("Failed to allcoate %ld bytes.\n", s[i]);
             }
             else
             {
-                printf("Allocated %ld bytes.\n", s[i]);
+                printf("Allocated %ld bytes @ %p.\n", s[i], ptr[i]);
                 memset(ptr[i], i, s[i]);
             }
         }
@@ -296,7 +331,7 @@ int test_3(void)
                 {
                     memset(ptr[j], 0, s[j]);
                     printf("Freeing %p.\n", ptr[j]);
-                    free(ptr[j]);
+                    ffree(ptr[j]);
                     ptr[j] = NULL;
                 }
             }
@@ -309,7 +344,7 @@ int test_3(void)
         {
             memset(ptr[i], 0, s[i]);
             printf("Freeing %p.\n", ptr[i]);
-            free(ptr[i]);
+            ffree(ptr[i]);
             ptr[i] = NULL;
         }
     }
