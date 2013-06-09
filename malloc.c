@@ -292,6 +292,23 @@ int test_2(void)
     return 0;
 }
 
+void check_data(void **ptr, size_t *size, int n)
+{
+    int i, j;
+    unsigned char *p;
+
+    for (i = 0; i < n; i++)
+    {
+        p = (unsigned char *)(ptr[i]);
+        if ( p == 0 )
+            continue;
+        for (j = 0; j < size[i]; j++)
+        {
+            assert( p[j] == i );
+        }
+    }
+}
+
 int test_3(void)
 {
 #define N 100
@@ -322,6 +339,7 @@ int test_3(void)
                 printf("Allocated %ld bytes @ %p.\n", s[i], ptr[i]);
                 memset(ptr[i], i, s[i]);
             }
+            check_data( ptr, s, N );
         }
         else
         {
@@ -335,6 +353,7 @@ int test_3(void)
                     ptr[j] = NULL;
                 }
             }
+            check_data( ptr, s, N );
         }
     }
 
